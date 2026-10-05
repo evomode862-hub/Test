@@ -1,0 +1,82 @@
+name: Build All Apps (APK + Windows EXE + Linux)
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate app
+        run: |
+          APP_DIR=$(dirname "$(find . -name pubspec.yaml -path '*shared_app*' | head -1)")
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: yes | flutter doctor --android-licenses || true
+      - name: Build APK
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          flutter create --platforms=android --project-name shared_app .
+          flutter pub get
+          flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ env.APP_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate app
+        shell: bash
+        run: |
+          APP_DIR=$(dirname "$(find . -name pubspec.yaml -path '*shared_app*' | head -1)")
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Build Windows EXE
+        shell: bash
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          flutter config --enable-windows-desktop
+          flutter create --platforms=windows --project-name shared_app .
+          flutter pub get
+          flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: ${{ env.APP_DIR }}/build/windows/x64/runner/Release/
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate app
+        run: |
+          APP_DIR=$(dirname "$(find . -name pubspec.yaml -path '*shared_app*' | head -1)")
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev \
+            liblzma-dev libpipewire-0.3-dev libx11-dev libxtst-dev \
+            libturbojpeg0-dev libebook1.2-dev libsecret-1-dev libjsoncpp-dev
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Build Linux
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          flutter config --enable-linux-desktop
+          flutter create --platforms=linux --project-name shared_app .
+          flutter pub get
+          flutter build linux --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-app
+          path: ${{ env.APP_DIR }}/build/linux/x64/release/bundle/
